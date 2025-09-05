@@ -13,12 +13,14 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain.chains import create_retrieval_chain
+from langchain_core.output_parsers import StrOutputParser
+
 
 # ========= Configurações
 load_dotenv()
 llm = ChatOpenAI(model=os.environ["CWG_LLM_OPENAI_MODEL"], temperature=0, api_key=os.environ["CWG_LLM_OPENAI_KEY"])
 embeddings = OpenAIEmbeddings(api_key=os.environ["CWG_LLM_OPENAI_KEY"], model=os.environ["CWG_LLM_OPENAI_EMBEDDING"] if os.environ["CWG_LLM_OPENAI_EMBEDDING"] else  "text-embedding-3-small")
-RAG_DIR = os.path.abspath('/rag-dir/');
+RAG_DIR = os.path.abspath('./src/rag-dir')+'/';
 
 # =================================================================
 def ask(question):
@@ -41,10 +43,9 @@ def ask_from_prompt(question, context):
                 Pergunta: 
                 {question}
         """);
-
-        chain = prompt.pipe(llm);
-        response = chain.invoke({ question, context });
-        return response.content
+        chain = prompt | llm | StrOutputParser()
+        response = chain.invoke({ "context":context, "question":question });
+        return response
 
     except Exception as error:
         print("Ocorreu um erro:", error);
@@ -63,12 +64,12 @@ def save_embedding(URL = None, PDF = None, rag = 'default'):
 
 
     # --- ETAPA 2: DIVIDIR O CONTEÚDO EM PEDAÇOS (CHUNKS) ---
-    text_splitter = RecursiveCharacterTextSplitter({ chunk_size: 1000, chunk_overlap: 200 });
-    split_docs = text_splitter.splitDocuments(docs);
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200);
+    split_docs = text_splitter.split_documents(docs);
 
     # --- ETAPA 3: INDEXAR O CONTEÚDO (CRIAR VECTOR STORE) ---
     vector_store = FAISS.from_documents(split_docs, embeddings);
-    vector_store.save(RAG_DIR + rag)
+    vector_store.save_local(RAG_DIR + rag)
 
 # -----------------------
 def ask_from_url(question, URL, saveDir = False):
@@ -80,12 +81,14 @@ def ask_from_url(question, URL, saveDir = False):
         docs = loader.load();
 
         # --- ETAPA 2: DIVIDIR O CONTEÚDO EM PEDAÇOS (CHUNKS) ---
-        text_splitter = RecursiveCharacterTextSplitter({ chunk_size: 1000, chunk_overlap: 200 });
-        split_docs = text_splitter.splitDocuments(docs);
+        text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200);
+        split_docs = text_splitter.split_documents(docs);
 
         # --- ETAPA 3: INDEXAR O CONTEÚDO (CRIAR VECTOR STORE) ---
         vector_store = FAISS.from_documents(split_docs, embeddings);
-        if (saveDir): vector_store.save(RAG_DIR+saveDir)
+        if (saveDir): 
+            print(RAG_DIR+saveDir)
+            vector_store.save_local(RAG_DIR+saveDir)
         
         retriever = vector_store.as_retriever();
 
@@ -106,7 +109,7 @@ def ask_from_url(question, URL, saveDir = False):
         retrieval_chain = create_retrieval_chain(retriever, document_chain)
 
         response = retrieval_chain.invoke({
-            input: question
+            "input": question
         });
 
         return response['answer']
@@ -124,12 +127,12 @@ def ask_from_pdf(question, filePath, saveDir = False):
         docs = loader.load();
 
         # --- ETAPA 2: DIVIDIR O CONTEÚDO EM PEDAÇOS (CHUNKS) ---
-        text_splitter = RecursiveCharacterTextSplitter({ chunk_size: 1000, chunk_overlap: 200 });
-        split_docs = text_splitter.splitDocuments(docs);
+        text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200);
+        split_docs = text_splitter.split_documents(docs);
 
         # --- ETAPA 3: INDEXAR O CONTEÚDO (CRIAR VECTOR STORE) ---
         vector_store = FAISS.from_documents(split_docs, embeddings);
-        if (saveDir): vector_store.save(RAG_DIR+saveDir)
+        if (saveDir): vector_store.save_local(RAG_DIR+saveDir)
         
         retriever = vector_store.as_retriever();
 
@@ -150,7 +153,7 @@ def ask_from_pdf(question, filePath, saveDir = False):
         retrieval_chain = create_retrieval_chain(retriever, document_chain)
 
         response = retrieval_chain.invoke({
-            input: question
+            "input": question
         });
 
         return response['answer']
@@ -163,7 +166,7 @@ def ask_from_embedding(question, ragPath = 'default'):
     try:
         
         # --- ETAPA 1: CARREGAR O CONTEÚDO DO LINK ---
-        vector_store = Faiss.load(RAG_DIR+ragPath, embeddings);
+        vector_store = FAISS.load_local(RAG_DIR+ragPath, embeddings, allow_dangerous_deserialization=True);
         retriever = vector_store.as_retriever();
 
         # --- ETAPA 2: CRIAR A CHAIN PARA FAZER PERGUNTAS ---
@@ -183,7 +186,7 @@ def ask_from_embedding(question, ragPath = 'default'):
         retrieval_chain = create_retrieval_chain(retriever, document_chain)
 
         response = retrieval_chain.invoke({
-            input: question
+            "input": question
         });
 
         return response['answer']
