@@ -159,6 +159,7 @@ save_embedding(url, arquivoRAG)
 arquivoRAG = 'nome_indice'
 resposta = ask_from_embedding('Quem é Carlos W. Gama?', arquivoRAG)
 print(resposta)
+```
 
 -----
 Autor: Carlos W. Gama
